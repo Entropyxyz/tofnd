@@ -73,7 +73,7 @@ jobs:
           fi
           ARCH="${{ matrix.arch }}"
           cargo install --locked --path .
-          mkdir bin
+          ls ./bin/*
           mv "$TOFND_PATH/tofnd" "./bin/tofnd-$OS-$ARCH-$SEMVER" 
 
       - name: Test tofnd version
