@@ -73,11 +73,11 @@ jobs:
           fi
           ARCH="${{ matrix.arch }}"
           cargo install --locked --path .
-          ls ./bin/*
-          mv "$TOFND_PATH/tofnd" "./bin/tofnd-$OS-$ARCH-$SEMVER" 
+          mkdir tofndbin
+          mv "$TOFND_PATH/tofnd" "./tofndbin/tofnd-$OS-$ARCH-$SEMVER" 
 
       - name: Test tofnd version
-        working-directory: ./bin
+        working-directory: ./tofndbin
         run: |
           ./tofnd-* --version
 
@@ -89,7 +89,7 @@ jobs:
           passphrase: ${{ secrets.GPG_PASSPHRASE }}
 
       - name: Sign binaries
-        working-directory: ./bin
+        working-directory: ./tofndbin
         env:
           SEMVER: "v5.5.5"
         run: |
@@ -104,7 +104,7 @@ jobs:
           ls -ltr
 
       - name: Create zip and sha256 files
-        working-directory: ./bin
+        working-directory: ./tofndbin
         run: |
           for i in `ls | grep -v .asc`
           do
