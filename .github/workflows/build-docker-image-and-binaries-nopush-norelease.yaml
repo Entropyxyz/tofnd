@@ -104,18 +104,21 @@ jobs:
 
     steps:
 
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: '0'
+          submodules: recursive
+
       - name: Install Cosign
-        if: matrix.os == 'ubuntu-18.04'
         uses: sigstore/cosign-installer@main
 
       - name: Install SSH key
-        if: matrix.os == 'ubuntu-18.04'
         uses: webfactory/ssh-agent@v0.4.1
         with:
           ssh-private-key: ${{ secrets.CICD_RSA_KEY }}
 
       - name: Build docker image
-        if: matrix.os == 'ubuntu-18.04'
         run: |
           make docker-image
 
