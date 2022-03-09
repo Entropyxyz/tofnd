@@ -1,0 +1,121 @@
+name: Test Build docker images and binaries
+
+on:
+  push:
+    branches:
+      - feat/matrix-build-nopush
+jobs:
+
+  release-binary:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-18.04, macos-latest]
+
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+
+    steps:
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: '0'
+          submodules: recursive
+
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+      - name: build binaries
+        env:
+          SEMVER: 2.2.2
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]
+          then
+              OS="linux"
+              TOFND_PATH="/home/runner/work/tofnd/tofnd/target/release"
+          else
+              OS="darwin"
+              TOFND_PATH="/Users/runner/work/tofnd/tofnd/target/release"
+          fi
+          ARCH="${{ matrix.arch }}"
+          cargo install --locked --path .
+          mkdir tofndbin
+          mv "$TOFND_PATH/tofnd" "./tofndbin/tofnd-$OS-$ARCH-$SEMVER" 
+
+      - name: Test tofnd version
+        working-directory: ./tofndbin
+        run: |
+          ./tofnd-* --version
+
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v4
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Sign binaries
+        working-directory: ./tofndbin
+        env:
+          SEMVER: 2.2.2
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]
+          then
+              OS="linux"
+          else
+              OS="darwin"
+          fi
+          ARCH="${{ matrix.arch }}" 
+          gpg --armor --detach-sign  tofnd-"$OS"-"$ARCH"-"$SEMVER"
+
+      - name: Create zip and sha256 files
+        working-directory: ./tofndbin
+        run: |
+          for i in `ls | grep -v .asc`
+          do
+            shasum -a 256 $i | awk '{print $1}' > $i.sha256
+            zip $i.zip $i
+            shasum -a 256 $i.zip | awk '{print $1}' > $i.zip.sha256
+            ls
+          done
+
+  release-docker:
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-18.04]
+
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+
+    steps:
+
+      - name: Install Cosign
+        if: matrix.os == 'ubuntu-18.04'
+        uses: sigstore/cosign-installer@main
+
+      - name: Install SSH key
+        if: matrix.os == 'ubuntu-18.04'
+        uses: webfactory/ssh-agent@v0.4.1
+        with:
+          ssh-private-key: ${{ secrets.CICD_RSA_KEY }}
+
+      - name: Build docker image
+        if: matrix.os == 'ubuntu-18.04'
+        run: |
+          make docker-image
+
